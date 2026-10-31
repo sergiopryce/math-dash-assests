@@ -6,9 +6,6 @@
   const ctx = canvas.getContext('2d');
   const $ = (id) => document.getElementById(id);
 
-  const playerImg = new Image();
-  playerImg.src = 'assets/player.png';
-
   let W = 0, H = 0, DPR = 1;
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -47,23 +44,22 @@
   try { best = Number(localStorage.getItem(BEST_KEY) || 0); } catch (e) {}
 
   let state = 'menu'; // menu | play | over
-  let objects, particles, player, speed, distance, starCount, spawnTimer, time, shake, stripeOffset;
+  let objects, particles, player, speed, dodged, starCount, spawnTimer, time, shake;
 
   function reset() {
     objects = [];
     particles = [];
     player = { lane: 0, x: 0, tilt: 0, hop: 0 };
     speed = 14;          // world units / second
-    distance = 0;
+    dodged = 0;
     starCount = 0;
     spawnTimer = 0.6;
     time = 0;
     shake = 0;
-    stripeOffset = 0;
   }
   reset();
 
-  const score = () => Math.floor(distance) + starCount * 25;
+  const score = () => dodged + starCount * 5;
 
   // ---------- Spawning ----------
   const SYMBOLS = ['+', '−', '×', '÷', '='];
@@ -169,7 +165,7 @@
     const targetX = player.lane;
     player.x += (targetX - player.x) * Math.min(1, dt * 14);
     player.tilt *= Math.pow(0.002, dt);
-    player.hop = Math.max(0, player.hop - dt * 5);
+    player.hop = Math.max(0, player.hop - dt * 4);
 
     for (const p of particles) {
       p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 600 * dt; p.life -= dt;
@@ -177,15 +173,10 @@
     particles = particles.filter((p) => p.life > 0);
     shake = Math.max(0, shake - dt);
 
-    if (state !== 'play') {
-      stripeOffset = (stripeOffset + dt * 6) % 4;
-      return;
-    }
+    if (state !== 'play') return;
 
     time += dt;
     speed = Math.min(14 + time * 0.45, 42);
-    distance += speed * dt * 0.5;
-    stripeOffset = (stripeOffset + speed * dt) % 4;
 
     spawnTimer -= dt;
     if (spawnTimer <= 0) {
@@ -212,6 +203,9 @@
           return;
         }
       }
+    }
+    for (const o of objects) {
+      if (!o.dead && !o.counted && o.type !== 'star' && o.z < -0.6) { o.counted = true; dodged++; }
     }
     objects = objects.filter((o) => !o.dead && o.z > -2.5);
 
@@ -240,7 +234,7 @@
     ctx.fillStyle = ground;
     ctx.fillRect(0, hy, W, H - hy);
 
-    // Road
+    // Floor of the arena (static: the player stands still, objects come to you)
     const farL = project(-1.6, FAR_Z), farR = project(1.6, FAR_Z);
     const nearL = project(-1.6, -3), nearR = project(1.6, -3);
     ctx.fillStyle = '#3b3285';
@@ -250,25 +244,50 @@
     ctx.closePath();
     ctx.fill();
 
-    // Moving dashes between lanes
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    // Lane lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
     for (const lx of [-0.5, 0.5]) {
-      for (let z = -stripeOffset + FAR_Z; z > -3; z -= 4) {
-        const a = project(lx, z), b = project(lx, z - 1.6);
-        const w = 4 * a.s, w2 = 4 * b.s;
-        ctx.beginPath();
-        ctx.moveTo(a.x - w, a.y); ctx.lineTo(a.x + w, a.y);
-        ctx.lineTo(b.x + w2, b.y); ctx.lineTo(b.x - w2, b.y);
-        ctx.fill();
-      }
+      const a = project(lx, FAR_Z), b = project(lx, -3);
+      ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
     }
-    // Road edges
+    ctx.stroke();
     ctx.strokeStyle = '#ff9a1f';
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(farL.x, farL.y); ctx.lineTo(nearL.x, nearL.y);
     ctx.moveTo(farR.x, farR.y); ctx.lineTo(nearR.x, nearR.y);
     ctx.stroke();
+
+    drawPortal();
+  }
+
+  // The launcher in the distance that throws objects at the player
+  const PORTAL_H = 2.6; // height above floor, in lane widths
+  function drawPortal() {
+    const p = project(0, FAR_Z);
+    const r = laneW() * 1.3 * p.s * 4;
+    const cx = p.x, cy = p.y - PORTAL_H * laneW() * p.s;
+    const pulse = 1 + Math.sin(performance.now() / 180) * 0.06;
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * pulse);
+    g.addColorStop(0, 'rgba(255,255,255,0.95)');
+    g.addColorStop(0.35, 'rgba(255,154,31,0.8)');
+    g.addColorStop(1, 'rgba(255,77,109,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * pulse, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Where an object is on screen: it leaves the portal, spreads to its lane
+  // and drops toward the player's height as it flies closer.
+  function objectScreenPos(o, z) {
+    const t = Math.min(1, (FAR_Z - z) / (FAR_Z * 0.55));
+    const lane = o.lane * (1 - Math.pow(1 - t, 2));
+    const p = project(lane, z);
+    const height = 0.55 + (PORTAL_H - 0.55) * Math.max(0, z) / FAR_Z;
+    return { x: p.x, y: p.y - height * laneW() * p.s, ground: p.y, s: p.s };
   }
 
   function drawShadow(x, y, r) {
@@ -279,15 +298,24 @@
   }
 
   function drawObject(o) {
-    const p = project(o.lane, o.z);
+    const p = objectScreenPos(o, o.z);
     const size = laneW() * 0.55 * p.s;
-    const fade = Math.min(1, (FAR_Z - o.z) / 6); // fade in from horizon
-    ctx.globalAlpha = Math.max(0, fade);
-    drawShadow(p.x, p.y, size * 0.5);
 
-    const cy = p.y - size * 0.75; // hover above the road
+    // Shadow on the floor and a motion trail behind it
+    drawShadow(p.x, p.ground, size * 0.45);
+    const trail = o.type === 'star' ? '#ffd23f' : o.color;
+    for (let i = 3; i >= 1; i--) {
+      const q = objectScreenPos(o, o.z + i * 1.2);
+      ctx.globalAlpha = 0.1 * (4 - i);
+      ctx.fillStyle = trail;
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, laneW() * 0.13 * q.s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
     ctx.save();
-    ctx.translate(p.x, cy);
+    ctx.translate(p.x, p.y);
 
     if (o.type === 'star') {
       ctx.rotate(Math.sin(o.spin) * 0.3);
@@ -357,20 +385,84 @@
     ctx.closePath();
   }
 
+  // Simple round critter seen from behind, drawn with shapes.
   function drawPlayer() {
     const p = project(player.x, 0);
-    const size = laneW() * 0.85;
-    const run = state === 'play' ? Math.sin(time * 18) : Math.sin(performance.now() / 160);
-    const bob = Math.abs(run) * size * 0.06 + player.hop * size * 0.12;
-    drawShadow(p.x, p.y, size * 0.38 * (1 - bob / size));
+    const r = laneW() * 0.32;
+    const t = performance.now() / 1000;
+    const breathe = Math.sin(t * 4) * 0.03;
+    const hop = Math.sin(player.hop * Math.PI) * r * 0.6;
+    const moving = player.hop > 0;
+    const step = moving ? Math.sin(t * 30) * r * 0.12 : 0;
 
-    if (!playerImg.complete || !playerImg.naturalWidth) return;
-    const h = size * (playerImg.naturalHeight / playerImg.naturalWidth);
+    drawShadow(p.x, p.y, r * 0.9 * (1 - hop / (r * 3)));
+
     ctx.save();
-    ctx.translate(p.x, p.y - bob);
-    ctx.rotate(player.tilt + run * 0.04);
+    ctx.translate(p.x, p.y - hop);
+    ctx.rotate(player.tilt);
     if (state === 'over') ctx.globalAlpha = 0.6;
-    ctx.drawImage(playerImg, -size / 2, -h, size, h);
+
+    // Feet
+    ctx.fillStyle = '#c45a12';
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(side * r * 0.42, -r * 0.1 + (side > 0 ? step : -step), r * 0.28, r * 0.16, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Arms
+    ctx.fillStyle = '#e8741b';
+    for (const side of [-1, 1]) {
+      ctx.save();
+      ctx.translate(side * r * 0.95, -r * 1.05);
+      ctx.rotate(side * (0.5 + Math.sin(t * 4 + side) * 0.1));
+      ctx.beginPath();
+      ctx.ellipse(0, r * 0.2, r * 0.17, r * 0.32, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Body
+    const by = -r * 1.1;
+    const sx = 1 + breathe, sy = 1 - breathe;
+    const body = ctx.createRadialGradient(-r * 0.3, by - r * 0.4, r * 0.1, 0, by, r * 1.1);
+    body.addColorStop(0, '#ffb35c');
+    body.addColorStop(0.6, '#ff8a1f');
+    body.addColorStop(1, '#d9620f');
+    ctx.fillStyle = body;
+    ctx.beginPath();
+    ctx.ellipse(0, by, r * sx, r * sy, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Ears
+    for (const side of [-1, 1]) {
+      ctx.fillStyle = '#ff8a1f';
+      ctx.beginPath();
+      ctx.ellipse(side * r * 0.55, by - r * 0.85, r * 0.2, r * 0.3, side * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#d9620f';
+      ctx.beginPath();
+      ctx.ellipse(side * r * 0.55, by - r * 0.82, r * 0.1, r * 0.17, side * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Hair tuft on top
+    ctx.strokeStyle = '#d9620f';
+    ctx.lineWidth = Math.max(2, r * 0.09);
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (const k of [-1, 0, 1]) {
+      ctx.moveTo(k * r * 0.12, by - r * 0.95);
+      ctx.quadraticCurveTo(k * r * 0.3, by - r * 1.35, k * r * 0.4 + r * 0.05, by - r * 1.25);
+    }
+    ctx.stroke();
+
+    // Little tail
+    ctx.fillStyle = '#ffd9a8';
+    ctx.beginPath();
+    ctx.arc(0, by + r * 0.6, r * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+
     ctx.restore();
     ctx.globalAlpha = 1;
   }

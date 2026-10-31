@@ -1,6 +1,6 @@
 # Math Dash
 
-A dodge game: the Math Dash character runs down a 3-lane road while math symbols fly toward it. Move left and right to dodge, and grab stars for bonus points. The game speeds up the longer you survive.
+A dodge game: the Math Dash character stands on a 3-lane floor while math symbols are thrown at it from a glowing portal. Move left and right to dodge, and grab stars for bonus points. Every object you dodge is a point, and they come faster the longer you survive.
 
 ## Controls
 - **Phone:** swipe left/right, or tap the left/right half of the screen
@@ -29,5 +29,5 @@ npx cap add ios && npx cap add android
 ## Files
 - `index.html`, `style.css` – page and menus
 - `game.js` – game loop, perspective road, obstacles, input, scoring
-- `assets/player.png` – character cut out of the Math Dash logo
+- The character is drawn in code (`drawPlayer` in `game.js`)
 - `assets/icon-*.png` – app icons

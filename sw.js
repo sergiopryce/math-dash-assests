@@ -2,7 +2,7 @@
 const CACHE = 'mathdash-v1';
 const FILES = [
   './', 'index.html', 'style.css', 'game.js', 'manifest.webmanifest',
-  'assets/player.png', 'assets/icon-192.png', 'assets/icon-512.png',
+  'assets/icon-192.png', 'assets/icon-512.png',
 ];
 
 self.addEventListener('install', (e) => {

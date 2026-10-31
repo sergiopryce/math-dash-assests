@@ -44,11 +44,12 @@
   try { best = Number(localStorage.getItem(BEST_KEY) || 0); } catch (e) {}
 
   let state = 'menu'; // menu | play | over
-  let objects, particles, player, speed, dodged, starCount, spawnTimer, time, shake;
+  let objects, particles, popups, player, speed, dodged, starCount, spawnTimer, time, shake;
 
   function reset() {
     objects = [];
     particles = [];
+    popups = [];
     player = { lane: 0, x: 0, tilt: 0, hop: 0 };
     speed = 14;          // world units / second
     dodged = 0;
@@ -62,20 +63,55 @@
   const score = () => dodged + starCount * 5;
 
   // ---------- Spawning ----------
-  const SYMBOLS = ['+', '−', '×', '÷', '='];
-  const COLORS = ['#ff4d6d', '#3aa0ff', '#7b5cff', '#2ec4b6', '#ff7b00'];
+  // Meme projectiles: emoji, a trail colour, and the line shown when it gets you.
+  const MEMES = [
+    { e: '🩴', color: '#3aa0ff', hit: 'NOT THE CHANCLA' },
+    { e: '🗿', color: '#9aa3b5', hit: 'Moai said no' },
+    { e: '🦆', color: '#ffd23f', hit: 'Bonked by a duck' },
+    { e: '🍌', color: '#ffe066', hit: 'Banana for scale' },
+    { e: '🧻', color: '#ffffff', hit: 'Wiped out' },
+    { e: '🐸', color: '#5cd65c', hit: "It's Wednesday, my dudes" },
+    { e: '🥔', color: '#c9a26b', hit: 'Potato aim. Yours.' },
+    { e: '💀', color: '#e6e6e6', hit: 'I am deceased' },
+    { e: '🤡', color: '#ff4d6d', hit: 'Clowned' },
+    { e: '🧀', color: '#ffc43d', hit: 'Cheesed' },
+    { e: '🐟', color: '#4fc3f7', hit: 'Slapped by a fish' },
+    { e: '🍕', color: '#ff9a1f', hit: 'Pizza delivered. To your face.' },
+    { e: '🪑', color: '#b07d4f', hit: 'Chair. Thrown.' },
+    { e: '🦖', color: '#66bb6a', hit: 'Rawr means goodbye' },
+    { e: '🐔', color: '#ffffff', hit: 'Chicken jockey got you' },
+  ];
+  const DODGE_LINES = ['nope', 'ez', 'not today', 'lol', 'skill diff', 'too slow', 'missed me', 'dodged', 'bruh', 'yeet'];
+
+  // Pre-render each emoji once so drawing it every frame is cheap.
+  const EMOJI_PX = 128;
+  const emojiCache = new Map();
+  function emojiSprite(e) {
+    let c = emojiCache.get(e);
+    if (!c) {
+      c = document.createElement('canvas');
+      c.width = c.height = EMOJI_PX;
+      const g = c.getContext('2d');
+      g.font = `${EMOJI_PX * 0.8}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+      g.textAlign = 'center';
+      g.textBaseline = 'middle';
+      g.fillText(e, EMOJI_PX / 2, EMOJI_PX * 0.55);
+      emojiCache.set(e, c);
+    }
+    return c;
+  }
 
   function spawnRow() {
     // Block 1 or 2 lanes, always leave at least one open.
     const blocked = Math.random() < Math.min(0.15 + time * 0.012, 0.55) ? 2 : 1;
     const lanes = LANES.slice().sort(() => Math.random() - 0.5);
     for (let i = 0; i < blocked; i++) {
-      const kind = Math.random() < 0.5 ? 'spike' : 'block';
-      const k = Math.floor(Math.random() * SYMBOLS.length);
+      const m = MEMES[Math.floor(Math.random() * MEMES.length)];
       objects.push({
-        type: kind, lane: lanes[i], z: FAR_Z,
+        type: 'meme', lane: lanes[i], z: FAR_Z,
         spin: Math.random() * Math.PI * 2,
-        symbol: SYMBOLS[k], color: COLORS[k],
+        spinRate: (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 4),
+        e: m.e, color: m.color, hit: m.hit,
       });
     }
     // Sometimes a star in a free lane
@@ -129,7 +165,9 @@
     $('hud').classList.remove('hidden');
   }
 
-  function gameOver() {
+  function gameOver(o) {
+    $('overTitle').textContent = o ? o.hit : 'Ouch!';
+    $('overEmoji').textContent = o ? o.e : '';
     state = 'over';
     shake = 0.4;
     try { if (navigator.vibrate) navigator.vibrate(200); } catch (e) {}
@@ -171,6 +209,8 @@
       p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 600 * dt; p.life -= dt;
     }
     particles = particles.filter((p) => p.life > 0);
+    for (const t of popups) { t.y -= 60 * dt; t.life -= dt; }
+    popups = popups.filter((t) => t.life > 0);
     shake = Math.max(0, shake - dt);
 
     if (state !== 'play') return;
@@ -187,7 +227,7 @@
 
     for (const o of objects) {
       o.z -= speed * dt;
-      o.spin += dt * (o.type === 'star' ? 3 : 2);
+      o.spin += dt * (o.type === 'star' ? 3 : o.spinRate);
 
       // Collision window right at the player
       if (!o.dead && o.z < 0.8 && o.z > -0.6 && Math.abs(o.lane - player.x) < 0.55) {
@@ -199,13 +239,23 @@
         } else {
           o.dead = true;
           burst(p.x, p.y - 40, o.color, 24);
-          gameOver();
+          gameOver(o);
           return;
         }
       }
     }
     for (const o of objects) {
-      if (!o.dead && !o.counted && o.type !== 'star' && o.z < -0.6) { o.counted = true; dodged++; }
+      if (!o.dead && !o.counted && o.type !== 'star' && o.z < -0.6) {
+        o.counted = true;
+        dodged++;
+        if (Math.random() < 0.4) {
+          const pp = project(player.x, 0);
+          popups.push({
+            text: DODGE_LINES[Math.floor(Math.random() * DODGE_LINES.length)],
+            x: pp.x + (Math.random() - 0.5) * 60, y: pp.y - laneW() * 0.9, life: 0.9,
+          });
+        }
+      }
     }
     objects = objects.filter((o) => !o.dead && o.z > -2.5);
 
@@ -325,44 +375,13 @@
       ctx.lineWidth = Math.max(1, size * 0.05);
       ctx.strokeStyle = '#e09b00';
       ctx.stroke();
-    } else if (o.type === 'spike') {
-      ctx.rotate(o.spin);
-      const r = size * 0.5;
-      ctx.beginPath();
-      for (let i = 0; i < 16; i++) {
-        const a = (i / 16) * Math.PI * 2;
-        const rr = i % 2 ? r * 0.68 : r;
-        ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
-      }
-      ctx.closePath();
-      ctx.fillStyle = o.color;
-      ctx.fill();
-      ctx.lineWidth = Math.max(1, size * 0.04);
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-      ctx.stroke();
-      ctx.rotate(-o.spin);
-      symbol(o.symbol, size * 0.42);
     } else {
-      ctx.rotate(Math.sin(o.spin) * 0.25);
-      const s = size;
-      roundRect(-s / 2, -s / 2, s, s, s * 0.2);
-      ctx.fillStyle = o.color;
-      ctx.fill();
-      ctx.lineWidth = Math.max(1, s * 0.05);
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-      ctx.stroke();
-      symbol(o.symbol, s * 0.62);
+      ctx.rotate(o.spin);
+      const d = size * 1.25;
+      ctx.drawImage(emojiSprite(o.e), -d / 2, -d / 2, d, d);
     }
     ctx.restore();
     ctx.globalAlpha = 1;
-  }
-
-  function symbol(ch, px) {
-    ctx.fillStyle = '#fff';
-    ctx.font = `bold ${px}px "Trebuchet MS", system-ui, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(ch, 0, px * 0.05);
   }
 
   function starPath(ro, ri) {
@@ -372,16 +391,6 @@
       const r = i % 2 ? ri : ro;
       ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
     }
-    ctx.closePath();
-  }
-
-  function roundRect(x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
   }
 
@@ -484,6 +493,19 @@
       ctx.beginPath();
       ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
       ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 24px "Trebuchet MS", system-ui, sans-serif';
+    ctx.lineWidth = 5;
+    ctx.strokeStyle = 'rgba(20,16,56,0.8)';
+    for (const t of popups) {
+      ctx.globalAlpha = Math.min(1, t.life / 0.4);
+      ctx.strokeText(t.text, t.x, t.y);
+      ctx.fillStyle = '#fff';
+      ctx.fillText(t.text, t.x, t.y);
     }
     ctx.globalAlpha = 1;
     ctx.restore();

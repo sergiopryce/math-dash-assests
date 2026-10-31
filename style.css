@@ -52,7 +52,8 @@ canvas { display: block; width: 100vw; height: 100vh; height: 100dvh; }
 h1 { font-size: 52px; letter-spacing: 1px; }
 h1 .m { color: #3aa0ff; }
 h1 .d { color: #ff9a1f; }
-h2 { font-size: 48px; color: #ff9a1f; }
+h2 { font-size: 40px; color: #ff9a1f; max-width: 340px; line-height: 1.1; }
+.big-emoji { font-size: 56px; animation: bob 1.2s ease-in-out infinite; }
 
 .hint { font-size: 18px; opacity: 0.9; line-height: 1.4; }
 .final { font-size: 30px; }

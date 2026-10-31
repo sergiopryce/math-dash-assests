@@ -38,6 +38,61 @@
     };
   }
 
+  // ---------- Waves ----------
+  // A run is split into waves. There are no banners: you notice a new wave
+  // because the world changes colour, the portal flares, and the memes start
+  // moving in new ways.
+  const WAVE_LEN = 18;  // seconds per wave
+  const THEMES = [
+    { // dusk
+      skyTop: '#1a1546', skyBot: '#5b3fa8', sun: '#ff9a1f', groundTop: '#2b2466', groundBot: '#4a3c9e',
+      floor: '#3b3285', edge: '#ff9a1f', portal: '#ff9a1f', stars: 0,
+    },
+    { // sunset
+      skyTop: '#3d1d5c', skyBot: '#ff6f61', sun: '#ffd23f', groundTop: '#5a2149', groundBot: '#a8435f',
+      floor: '#7a2f5a', edge: '#ffd23f', portal: '#ffd23f', stars: 0,
+    },
+    { // night
+      skyTop: '#03061a', skyBot: '#14235e', sun: '#9ec9ff', groundTop: '#0a1238', groundBot: '#1c2d6e',
+      floor: '#15215a', edge: '#4fc3f7', portal: '#4fc3f7', stars: 1,
+    },
+    { // toxic
+      skyTop: '#06200f', skyBot: '#2f7d32', sun: '#c6ff00', groundTop: '#0f2d17', groundBot: '#2a5c2e',
+      floor: '#1d4424', edge: '#c6ff00', portal: '#76ff03', stars: 0.4,
+    },
+    { // inferno
+      skyTop: '#2a0505', skyBot: '#b3261e', sun: '#ffea00', groundTop: '#3a0b0b', groundBot: '#7a1a12',
+      floor: '#5c140f', edge: '#ff6d00', portal: '#ff3d00', stars: 0,
+    },
+    { // vapor
+      skyTop: '#2b0a3d', skyBot: '#ff4fd8', sun: '#00f0ff', groundTop: '#1a0640', groundBot: '#5a1aa8',
+      floor: '#3a1080', edge: '#00f0ff', portal: '#ff4fd8', stars: 0.7,
+    },
+  ];
+  // How each wave plays. After the last one the later waves repeat, still getting harder.
+  const WAVES = [
+    { moves: [], pool: null },
+    { moves: ['bounce'], pool: ['🩴'] },
+    { moves: ['bounce', 'switch'], pool: ['🗿', '💀'] },
+    { moves: ['zigzag', 'switch'], pool: ['🐸', '🦆'] },
+    { moves: ['bounce', 'zigzag', 'switch'], pool: ['🪑', '🍕', '🦖'] },
+    { moves: ['bounce', 'zigzag', 'switch', 'switch'], pool: null },
+  ];
+  const waveDef = (n) => (n < WAVES.length ? WAVES[n] : WAVES[3 + ((n - 3) % (WAVES.length - 3))]);
+  const waveTheme = (n) => (n < THEMES.length ? THEMES[n] : THEMES[3 + ((n - 3) % (THEMES.length - 3))]);
+
+  let themeFrom, themeTo, themeMix;
+  const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  function themeColor(key, alpha = 1) {
+    const a = hexRgb(themeFrom[key]), b = hexRgb(themeTo[key]);
+    const c = a.map((v, i) => Math.round(v + (b[i] - v) * themeMix));
+    return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+  }
+  const themeValue = (key) => themeFrom[key] + (themeTo[key] - themeFrom[key]) * themeMix;
+
+  // Fixed star field for the night-style skies
+  const SKY_STARS = Array.from({ length: 70 }, () => ({ x: Math.random(), y: Math.random(), r: 0.5 + Math.random() * 1.4, t: Math.random() * 6 }));
+
   // ---------- State ----------
   const BEST_KEY = 'mathdash.best';
   let best = 0;
@@ -45,6 +100,7 @@
 
   let state = 'menu'; // menu | play | over
   let objects, particles, popups, player, speed, dodged, starCount, spawnTimer, time, shake;
+  let wave, waveTime, flash, portalFlare;
 
   function reset() {
     objects = [];
@@ -57,6 +113,12 @@
     spawnTimer = 0.6;
     time = 0;
     shake = 0;
+    wave = 0;
+    waveTime = 0;
+    flash = 0;
+    portalFlare = 0;
+    themeFrom = themeTo = THEMES[0];
+    themeMix = 1;
   }
   reset();
 
@@ -103,16 +165,29 @@
 
   function spawnRow() {
     // Block 1 or 2 lanes, always leave at least one open.
-    const blocked = Math.random() < Math.min(0.15 + time * 0.012, 0.55) ? 2 : 1;
+    const def = waveDef(wave);
+    const blocked = Math.random() < Math.min(0.15 + wave * 0.1 + waveTime * 0.004, 0.6) ? 2 : 1;
     const lanes = LANES.slice().sort(() => Math.random() - 0.5);
     for (let i = 0; i < blocked; i++) {
-      const m = MEMES[Math.floor(Math.random() * MEMES.length)];
-      objects.push({
-        type: 'meme', lane: lanes[i], z: FAR_Z,
+      // Each wave leans on a couple of "featured" memes
+      const pool = def.pool && Math.random() < 0.6 ? MEMES.filter((m) => def.pool.includes(m.e)) : MEMES;
+      const m = pool[Math.floor(Math.random() * pool.length)];
+      const move = def.moves.length && Math.random() < 0.55 ? def.moves[Math.floor(Math.random() * def.moves.length)] : 'straight';
+      const o = {
+        type: 'meme', lane: lanes[i], z: FAR_Z, move,
         spin: Math.random() * Math.PI * 2,
         spinRate: (Math.random() < 0.5 ? -1 : 1) * (2 + Math.random() * 4),
+        phase: Math.random() * Math.PI * 2,
         e: m.e, color: m.color, hit: m.hit,
-      });
+      };
+      // A switcher starts in a neighbouring lane and slides into its real lane
+      // mid-flight. Its final lane is still one of this row's blocked lanes, so
+      // there is always an open lane once everything settles.
+      if (move === 'switch') {
+        const opts = [o.lane - 1, o.lane + 1].filter((l) => l >= -1 && l <= 1);
+        o.fromLane = opts[Math.floor(Math.random() * opts.length)];
+      }
+      objects.push(o);
     }
     // Sometimes a star in a free lane
     if (Math.random() < 0.45) {
@@ -123,10 +198,10 @@
   // ---------- Native helpers (only active inside the iOS/Android app) ----------
   const Native = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()
     ? window.Capacitor.Plugins : null;
-  function buzz() {
+  function buzz(light) {
     try {
-      if (Native && Native.Haptics) Native.Haptics.impact({ style: 'HEAVY' });
-      else if (navigator.vibrate) navigator.vibrate(200);
+      if (Native && Native.Haptics) Native.Haptics.impact({ style: light ? 'LIGHT' : 'HEAVY' });
+      else if (navigator.vibrate) navigator.vibrate(light ? 40 : 200);
     } catch (e) {}
   }
   if (Native && Native.StatusBar) Native.StatusBar.hide().catch(() => {});
@@ -213,6 +288,31 @@
     }
   }
 
+  function startWave(n) {
+    themeFrom = currentThemeSnapshot();
+    themeTo = waveTheme(n);
+    themeMix = 0;
+    wave = n;
+    waveTime = 0;
+    flash = 0.35;
+    portalFlare = 1;
+    spawnTimer = Math.max(spawnTimer, 1.4); // short breather so the shift is noticeable
+    buzz(true);
+  }
+
+  // Freeze the current (possibly mid-blend) colours as the start of the next blend
+  function currentThemeSnapshot() {
+    const snap = {};
+    for (const k of Object.keys(THEMES[0])) {
+      if (k === 'stars') snap[k] = themeValue(k);
+      else {
+        const m = themeColor(k).match(/\d+/g).slice(0, 3).map(Number);
+        snap[k] = '#' + m.map((v) => v.toString(16).padStart(2, '0')).join('');
+      }
+    }
+    return snap;
+  }
+
   // ---------- Update ----------
   function update(dt) {
     // Player motion always animates (menu too) so it looks alive
@@ -226,19 +326,24 @@
     }
     particles = particles.filter((p) => p.life > 0);
     for (const t of popups) { t.y -= 60 * dt; t.life -= dt; }
+    flash = Math.max(0, flash - dt * 1.5);
+    portalFlare = Math.max(0, portalFlare - dt * 0.8);
+    if (themeMix < 1) themeMix = Math.min(1, themeMix + dt / 2.5);
     popups = popups.filter((t) => t.life > 0);
     shake = Math.max(0, shake - dt);
 
     if (state !== 'play') return;
 
     time += dt;
-    speed = Math.min(14 + time * 0.45, 42);
+    waveTime += dt;
+    if (waveTime >= WAVE_LEN) startWave(wave + 1);
+    speed = Math.min(15 + wave * 3.5 + waveTime * 0.12, 46);
 
     spawnTimer -= dt;
     if (spawnTimer <= 0) {
       spawnRow();
-      // rows get closer together as speed rises, but never impossible
-      spawnTimer = Math.max(0.45, 1.25 - time * 0.012);
+      // rows get closer together each wave, but never impossible
+      spawnTimer = Math.max(0.45, 1.2 - wave * 0.12 - waveTime * 0.004);
     }
 
     for (const o of objects) {
@@ -246,7 +351,7 @@
       o.spin += dt * (o.type === 'star' ? 3 : o.spinRate);
 
       // Collision window right at the player
-      if (!o.dead && o.z < 0.8 && o.z > -0.6 && Math.abs(o.lane - player.x) < 0.55) {
+      if (!o.dead && o.z < 0.8 && o.z > -0.6 && Math.abs(laneAt(o, o.z) - player.x) < 0.55) {
         const p = project(o.lane, 0);
         if (o.type === 'star') {
           o.dead = true;
@@ -283,27 +388,40 @@
   function drawBackground() {
     const hy = horizonY();
     const sky = ctx.createLinearGradient(0, 0, 0, hy);
-    sky.addColorStop(0, '#1a1546');
-    sky.addColorStop(1, '#5b3fa8');
+    sky.addColorStop(0, themeColor('skyTop'));
+    sky.addColorStop(1, themeColor('skyBot'));
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, hy + 1);
 
+    const starAlpha = themeValue('stars');
+    if (starAlpha > 0.01) {
+      const t = performance.now() / 1000;
+      ctx.fillStyle = '#fff';
+      for (const st of SKY_STARS) {
+        ctx.globalAlpha = starAlpha * (0.5 + 0.5 * Math.sin(t * 2 + st.t));
+        ctx.beginPath();
+        ctx.arc(st.x * W, st.y * hy * 0.95, st.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
     // Distant glow
-    ctx.fillStyle = 'rgba(255, 154, 31, 0.35)';
+    ctx.fillStyle = themeColor('sun', 0.35);
     ctx.beginPath();
     ctx.arc(W / 2, hy, Math.min(W, H) * 0.18, Math.PI, 0);
     ctx.fill();
 
     const ground = ctx.createLinearGradient(0, hy, 0, H);
-    ground.addColorStop(0, '#2b2466');
-    ground.addColorStop(1, '#4a3c9e');
+    ground.addColorStop(0, themeColor('groundTop'));
+    ground.addColorStop(1, themeColor('groundBot'));
     ctx.fillStyle = ground;
     ctx.fillRect(0, hy, W, H - hy);
 
     // Floor of the arena (static: the player stands still, objects come to you)
     const farL = project(-1.6, FAR_Z), farR = project(1.6, FAR_Z);
     const nearL = project(-1.6, -3), nearR = project(1.6, -3);
-    ctx.fillStyle = '#3b3285';
+    ctx.fillStyle = themeColor('floor');
     ctx.beginPath();
     ctx.moveTo(farL.x, farL.y); ctx.lineTo(farR.x, farR.y);
     ctx.lineTo(nearR.x, nearR.y); ctx.lineTo(nearL.x, nearL.y);
@@ -319,7 +437,7 @@
       ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
     }
     ctx.stroke();
-    ctx.strokeStyle = '#ff9a1f';
+    ctx.strokeStyle = themeColor('edge');
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(farL.x, farL.y); ctx.lineTo(nearL.x, nearL.y);
@@ -335,11 +453,11 @@
     const p = project(0, FAR_Z);
     const r = laneW() * 1.3 * p.s * 4;
     const cx = p.x, cy = p.y - PORTAL_H * laneW() * p.s;
-    const pulse = 1 + Math.sin(performance.now() / 180) * 0.06;
+    const pulse = 1 + Math.sin(performance.now() / 180) * 0.06 + portalFlare * 1.2;
     const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * pulse);
     g.addColorStop(0, 'rgba(255,255,255,0.95)');
-    g.addColorStop(0.35, 'rgba(255,154,31,0.8)');
-    g.addColorStop(1, 'rgba(255,77,109,0)');
+    g.addColorStop(0.35, themeColor('portal', 0.8));
+    g.addColorStop(1, themeColor('portal', 0));
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(cx, cy, r * pulse, 0, Math.PI * 2);
@@ -348,11 +466,24 @@
 
   // Where an object is on screen: it leaves the portal, spreads to its lane
   // and drops toward the player's height as it flies closer.
+  const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+  // Which lane an object is in at distance z. Switchers slide lanes between
+  // z=24 and z=15; zig-zaggers weave until z=10. Both are settled well
+  // before they reach the player.
+  function laneAt(o, z) {
+    let lane = o.lane;
+    if (o.move === 'switch') lane = o.fromLane + (o.lane - o.fromLane) * smooth(24, 15, z);
+    if (o.move === 'zigzag') lane += Math.sin(z * 0.45 + o.phase) * 0.7 * smooth(10, 20, z);
+    return lane;
+  }
+
   function objectScreenPos(o, z) {
     const t = Math.min(1, (FAR_Z - z) / (FAR_Z * 0.55));
-    const lane = o.lane * (1 - Math.pow(1 - t, 2));
+    const lane = laneAt(o, z) * (1 - Math.pow(1 - t, 2));
     const p = project(lane, z);
-    const height = 0.55 + (PORTAL_H - 0.55) * Math.max(0, z) / FAR_Z;
+    let height = 0.55 + (PORTAL_H - 0.55) * Math.max(0, z) / FAR_Z;
+    if (o.move === 'bounce') height += Math.abs(Math.sin(z * 0.35 + o.phase)) * 1.3 * smooth(3, 12, z);
     return { x: p.x, y: p.y - height * laneW() * p.s, ground: p.y, s: p.s };
   }
 
@@ -525,6 +656,11 @@
     }
     ctx.globalAlpha = 1;
     ctx.restore();
+
+    if (flash > 0) {
+      ctx.fillStyle = themeColor('sun', flash);
+      ctx.fillRect(0, 0, W, H);
+    }
   }
 
   // ---------- Loop ----------

@@ -1,0 +1,20 @@
+{
+  "appId": "com.theferrules.mathdash",
+  "appName": "Math Dash",
+  "webDir": "www",
+  "backgroundColor": "#26205c",
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 800,
+      "backgroundColor": "#26205c",
+      "showSpinner": false
+    },
+    "StatusBar": {
+      "overlaysWebView": true,
+      "style": "DARK"
+    }
+  },
+  "ios": {
+    "contentInset": "never"
+  }
+}

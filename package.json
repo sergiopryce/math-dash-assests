@@ -1,0 +1,25 @@
+{
+  "name": "math-dash",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dodge the memes. A one-thumb arcade game.",
+  "scripts": {
+    "serve": "npx http-server www -p 8000 -c-1",
+    "sync": "npx cap sync",
+    "assets": "npx capacitor-assets generate --iconBackgroundColor '#26205c' --iconBackgroundColorDark '#26205c' --splashBackgroundColor '#26205c' --splashBackgroundColorDark '#26205c'",
+    "open:ios": "npx cap open ios",
+    "open:android": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.6.0",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^4.0.0"
+  }
+}

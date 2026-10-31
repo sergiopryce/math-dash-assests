@@ -43,7 +43,8 @@
 
   // ---------- State ----------
   const BEST_KEY = 'mathdash.best';
-  let best = Number(localStorage.getItem(BEST_KEY) || 0);
+  let best = 0;
+  try { best = Number(localStorage.getItem(BEST_KEY) || 0); } catch (e) {}
 
   let state = 'menu'; // menu | play | over
   let objects, particles, player, speed, distance, starCount, spawnTimer, time, shake, stripeOffset;
@@ -135,11 +136,11 @@
   function gameOver() {
     state = 'over';
     shake = 0.4;
-    if (navigator.vibrate) navigator.vibrate(200);
+    try { if (navigator.vibrate) navigator.vibrate(200); } catch (e) {}
     const s = score();
     if (s > best) {
       best = s;
-      localStorage.setItem(BEST_KEY, String(best));
+      try { localStorage.setItem(BEST_KEY, String(best)); } catch (e) {}
     }
     $('finalScore').textContent = s;
     $('bestOver').textContent = best;

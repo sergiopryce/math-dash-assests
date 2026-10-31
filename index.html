@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#26205c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Math Dash" />
+  <title>Math Dash</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="assets/icon-192.png" />
+  <link rel="apple-touch-icon" href="assets/icon-192.png" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="score">0</div>
+    <div id="stars">★ 0</div>
+  </div>
+
+  <div id="menu" class="overlay">
+    <img src="assets/player.png" alt="" class="hero" />
+    <h1><span class="m">Math</span> <span class="d">Dash</span></h1>
+    <p class="hint">Swipe or tap left / right to dodge.<br />Grab the stars!</p>
+    <button id="play">Play</button>
+    <p class="best">Best: <span id="bestMenu">0</span></p>
+  </div>
+
+  <div id="over" class="overlay hidden">
+    <h2>Ouch!</h2>
+    <p class="final">Score <span id="finalScore">0</span></p>
+    <p class="best">Best: <span id="bestOver">0</span></p>
+    <button id="again">Play again</button>
+  </div>
+
+  <script src="game.js"></script>
+  <script>
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>

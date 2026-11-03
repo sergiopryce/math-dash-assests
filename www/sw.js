@@ -1,7 +1,7 @@
 // Offline cache so the game works without a connection once installed.
-const CACHE = 'mathdash-v2';
+const CACHE = 'mathdash-v3';
 const FILES = [
-  './', 'index.html', 'style.css', 'game.js', 'manifest.webmanifest',
+  './', 'index.html', 'style.css', 'js/data.js', 'js/save.js', 'js/audio.js', 'js/game.js', 'js/ui.js', 'manifest.webmanifest',
   'assets/icon-192.png', 'assets/icon-512.png',
 ];
 

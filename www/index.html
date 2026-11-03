@@ -17,34 +17,107 @@
 <body>
   <canvas id="game"></canvas>
 
+  <!-- In-run HUD -->
   <div id="hud" class="hidden">
-    <div id="score">0</div>
-    <div id="stars">★ 0</div>
+    <div class="hud-row">
+      <div id="score">0</div>
+      <div id="stars">★ 0</div>
+    </div>
+    <div id="powers"></div>
   </div>
   <button id="pauseBtn" class="hud-btn hidden" aria-label="Pause">II</button>
+  <div id="toast" class="toast hidden"></div>
 
-  <div id="pause" class="overlay hidden">
-    <h2>Paused</h2>
-    <button id="resume">Resume</button>
-  </div>
-
-  <div id="menu" class="overlay">
+  <!-- Main menu -->
+  <div id="menu" class="overlay screen">
+    <div class="topbar"><span class="pill" id="menuStars">★ 0</span></div>
     <div class="big-emoji">🩴 🗿 🦆 🍌</div>
     <h1><span class="m">Math</span> <span class="d">Dash</span></h1>
-    <p class="hint">Memes incoming!<br />Swipe or tap left / right to dodge.<br />Grab the stars!</p>
-    <button id="play">Play</button>
-    <p class="best">Best: <span id="bestMenu">0</span></p>
+    <p class="best" id="menuBest">Best: 0</p>
+    <button id="play" class="btn-main">Play</button>
+    <div class="menu-row">
+      <button class="btn-icon" data-open="shop"><span>🛒</span>Shop</button>
+      <button class="btn-icon" data-open="missions"><span>🎯</span>Missions<b id="missionDot" class="dot hidden"></b></button>
+      <button class="btn-icon" data-open="settings"><span>⚙️</span>Settings</button>
+    </div>
   </div>
 
+  <!-- Shop -->
+  <div id="shop" class="overlay screen panel-screen hidden">
+    <div class="panel">
+      <div class="panel-head">
+        <button class="back" data-back>‹</button>
+        <h3>Shop</h3>
+        <span class="pill" id="shopStars">★ 0</span>
+      </div>
+      <div class="tabs">
+        <button data-tab="upgrades" class="on">Upgrades</button>
+        <button data-tab="skins">Critters</button>
+        <button data-tab="hats">Hats</button>
+      </div>
+      <div id="shopList" class="list"></div>
+    </div>
+  </div>
+
+  <!-- Missions -->
+  <div id="missions" class="overlay screen panel-screen hidden">
+    <div class="panel">
+      <div class="panel-head">
+        <button class="back" data-back>‹</button>
+        <h3>Missions</h3>
+        <span class="pill" id="missionStars">★ 0</span>
+      </div>
+      <p class="sub">Finish missions to earn stars. New ones appear after each run.</p>
+      <div id="missionList" class="list"></div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div id="settings" class="overlay screen panel-screen hidden">
+    <div class="panel">
+      <div class="panel-head">
+        <button class="back" data-back>‹</button>
+        <h3>Settings</h3>
+        <span></span>
+      </div>
+      <div class="list">
+        <label class="row toggle"><span>🔊 Sound effects</span><input type="checkbox" id="setSound" /></label>
+        <label class="row toggle"><span>🎵 Music</span><input type="checkbox" id="setMusic" /></label>
+        <label class="row toggle"><span>📳 Vibration</span><input type="checkbox" id="setHaptics" /></label>
+        <button class="row danger" id="resetBtn">Reset all progress</button>
+      </div>
+      <p class="sub" id="statsLine"></p>
+      <p class="sub small">Math Dash v1.0 · © 2026 The Ferrules LLC</p>
+    </div>
+  </div>
+
+  <!-- Pause -->
+  <div id="pause" class="overlay hidden">
+    <h2>Paused</h2>
+    <button id="resume" class="btn-main">Resume</button>
+    <button id="quit" class="btn-ghost">Quit run</button>
+  </div>
+
+  <!-- Game over -->
   <div id="over" class="overlay hidden">
     <div id="overEmoji" class="big-emoji"></div>
     <h2 id="overTitle">Ouch!</h2>
-    <p class="final">Score <span id="finalScore">0</span></p>
-    <p class="best">Best: <span id="bestOver">0</span></p>
-    <button id="again">Play again</button>
+    <div class="score-line"><span id="finalScore">0</span><b id="newBest" class="badge hidden">NEW BEST!</b></div>
+    <div class="stat-row">
+      <div><b id="overWave">1</b><span>wave</span></div>
+      <div><b id="overStars">0</b><span>stars</span></div>
+      <div><b id="overNear">0</b><span>close calls</span></div>
+    </div>
+    <div id="overMissions" class="mini-missions"></div>
+    <button id="again" class="btn-main">Play again</button>
+    <button id="home" class="btn-ghost">Home</button>
   </div>
 
-  <script src="game.js"></script>
+  <script src="js/data.js"></script>
+  <script src="js/save.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/ui.js"></script>
   <script>
     const isApp = window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
     if (!isApp && 'serviceWorker' in navigator && location.protocol !== 'file:') {
